@@ -1,164 +1,42 @@
-# To add a new cell, type '# %%'
-# To add a new markdown cell, type '# %% [markdown]'
-# %%
-from IPython import get_ipython
-
-# %% [markdown]
-# # CMPE547 Term Project
-# %% [markdown]
-# ## Quantifying the Classification Uncertainty of Neural Networks through a Bayesian Perspective
-# ### Bedirhan Çaldır 2017700036
-# ### Atilberk Çelebi 2017700171
-# %% [markdown]
-# ## Mathematical background
-# %% [markdown]
-# The idea is replacing the softmax layer of a DNN with a ReLU (or any other activation function with non-negative output) and changing the loss function in a way that it is consisting of both the output loss and a regularization term of a KL divergence to learn the uncertainty representation. Such an approach allows us to keep the regular usage of NNs (prediction) as well as modeling the uncertainty by feeding the output of the last layer (interpreted as the belief mass of the classes) to a Dirichlet as input so that the output could be evaluated to see how likely such an output is.
-# %% [markdown]
-# ### Theory of Evidence
-# Suppose that there are $K$ outputs of an NN. Then we can write the following equality
-# $$u + \sum_{k = 1}^{K} b_k = 1$$
-# where $b_k$ corresponds to $k^{th}$ ReLU output which will be interpreted as the *belief mass* of the $k^{th}$ class and $u$ is the *uncertainty mass* of the particular outputs.
-# 
-# Each $b_k$ is defined as follows
-# $$b_k =\frac{e_k}{S}$$
-# where $e_k$ is the evidence of the $k^{th}$ class and $S$ is the strength of the Dirichlet we'll use and defined as 
-# $$S = \sum_{k = 1}^{K} (e_k + 1)$$
-# which leaves $u$ the following portion
-# $$u = \frac{K}{S}$$
-# 
-# 
-# Replacing $e_k + 1$ with $a_k$
-# $$\alpha_k = e_k + 1$$
-# and using the resultant simplex vector $a$ in a Dirichlet as the density
-# $$
-# D(\boldsymbol{p}|\boldsymbol{\alpha}) = \begin{cases} 
-#       \frac{1}{B(\boldsymbol{\alpha})} \prod_{i=1}^{K} p_i^{\alpha_i - 1} & \text{for } \boldsymbol{p} \in \mathcal{S}_K \\
-#       0 & \text{otherwise}
-#    \end{cases}
-# $$
-# 
-# As a result, we can define $\mathcal{S}_K$ as 
-# $$\mathcal{S}_K = \{ \boldsymbol{p} | \sum_{i=1}^K p_i = 1 \text{ and } 0 \leq p_1,...,p_K \leq 1 \}$$
-# and the probability of $k^{th}$ can still be calculated as
-# $$\hat{p}_k = \frac{\alpha_k}{S}$$
-# %% [markdown]
-# ### Loss Functions
-# 
-# There are three different loss functions defined in the paper:
-# 
-# #### 1) Integrating out the class probabilities from posterior of Dirichlet prior & Multinomial likelihood - will be mentioned as *Eqn. 3* (as in the paper)
-# 
-# $$
-# \mathcal{L}_i(\Theta) =
-# - log ( \int \prod_{j=1}^K p_{ij}^{y_{ij}} \frac{1}{B(\alpha_i)} \prod_{j=1}^K p_{ij}^{\alpha_{ij} -1 } d\boldsymbol{p}_i )
-# = \sum_{j=1}^K y_{ij} (log(S_i) - log(\alpha_{ij}))
-# $$
-# 
-# #### 2) Using cross-entropy loss - will be mentioned as *Eqn. 4* (as in the paper)
-# 
-# $$
-# \mathcal{L}_i(\Theta) =
-# \int [\sum_{j=1}^K -y_{ij} log(p_{ij})] \frac{1}{B(\alpha_i)} \prod_{j=1}^K p_{ij}^{\alpha_{ij} -1 } d\boldsymbol{p}_i 
-# = \sum_{j=1}^K y_{ij} (\psi(S_i) - \psi(\alpha_{ij}))
-# $$
-# 
-# #### 3) Using sum of squares loss - will be mentioned as *Eqn. 5* (as in the paper)
-# 
-# $$
-# \mathcal{L}_i(\Theta) =
-# \int ||\boldsymbol{y}_i - \boldsymbol{p}_i||_2^2 \frac{1}{B(\alpha_i)} \prod_{j=1}^K p_{ij}^{\alpha_{ij} -1 } d\boldsymbol{p}_i 
-# = \sum_{j=1}^K \mathbb{E}[(y_{ij} - p_{ij})^2]
-# $$
-# 
-# $$
-# = \sum_{j=1}^K \mathbb{E}[y_{ij}^2 - 2 y_{ij}p_{ij} + p_{ij}^2] 
-# = \sum_{j=1}^K (y_{ij}^2 - 2 y_{ij}\mathbb{E}[p_{ij}] + \mathbb{E}[p_{ij}^2])
-# $$
-# 
-# $$
-# = \sum_{j=1}^K (y_{ij}^2 - 2 y_{ij}\mathbb{E}[p_{ij}] + \mathbb{E}[p_{ij}]^2 + \text{Var}(p_{ij}))
-# = \sum_{j=1}^K (y_{ij} - \mathbb{E}[p_{ij}])^2 + \text{Var}(p_{ij})
-# $$
-# 
-# $$
-# = \sum_{j=1}^K (y_{ij}^2 - 2 y_{ij}\mathbb{E}[p_{ij}] + \mathbb{E}[p_{ij}]^2 + \text{Var}(p_{ij}))
-# = \sum_{j=1}^K (y_{ij} - \mathbb{E}[p_{ij}])^2 + \text{Var}(p_{ij})
-# $$
-# 
-# $$
-# = \sum_{j=1}^K (y_{ij} - \frac{\alpha_{ij}}{S_i})^2 + \frac{\alpha_{ij}(S_i - \alpha_{ij})}{S_i^2(S_i + 1)}
-# $$
-# 
-# $$
-# = \sum_{j=1}^K (y_{ij} - \hat{p}_{ij})^2 + \frac{\hat{p}_{ij}(1 - \hat{p}_{ij})}{(S_i + 1)}
-# $$
-# %% [markdown]
-# ### Regularization with KL Divergence
-# 
-# $$
-# \mathcal{L}(\Theta) = \sum_{i=1}^N \mathcal{L}_i(\Theta) + \lambda_t \sum_{i=1}^N KL[ D(\boldsymbol{p}_i|\boldsymbol{\widetilde{\alpha}}_i)||  D(\boldsymbol{p}_i|\langle 1,...,1 \rangle )]
-# $$
-# 
-# where $\lambda_t$ is annealed during the training by starting from 0 up to 1.
-# 
-# After the derivations, KL term turns out to be in the following form
-# $$
-# KL[ D(\boldsymbol{p}_i|\boldsymbol{\widetilde{\alpha}}_i)||  D(\boldsymbol{p}_i|\langle 1,...,1 \rangle )] = log(\frac{\Gamma(\sum_{k=1}^K \widetilde{\alpha}_{ik})}{\Gamma(K)\prod_{k=1}^K\Gamma(\widetilde{\alpha}_{ik})}) + \sum_{k=1}^K (\widetilde{\alpha}_{ik} - 1) [\psi(\widetilde{\alpha}_{ik}) - \psi(\sum_{k=1}^K \widetilde{\alpha}_{ik})]
-# $$
-# %% [markdown]
-# ## Code
-# %% [markdown]
-# ##### Import required libraries
-
-# %%
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist.input_data import read_data_sets as mnist_data_downloader
-from tensorflow.keras.datasets.cifar10 import load_data as cifar_data_downloader
-
+from tensorflow.keras.datasets import mnist, cifar10
 import scipy.ndimage as nd
 import numpy as np
 from matplotlib import pyplot as plt
 import pylab as pl
-from IPython import display
-
 import scipy.stats
 import scipy.io
 
-# %% [markdown]
-# ##### Download datasets
-
-# %%
-#get mnist dataset
-mnist = mnist_data_downloader('MNIST_data', one_hot=True)
-
 #get cifar dataset
-(cifar10_x_train, cifar10_y_train), (cifar10_x_test, cifar10_y_test) = cifar_data_downloader()
+(cifar10_x_train, cifar10_y_train), (cifar10_x_test, cifar10_y_test) = cifar10.load_data()
 cifar10_x_train = cifar10_x_train.reshape(50000, 32*32*3) / 255
 cifar10_y_train = cifar10_y_train.reshape(50000)
 cifar10_x_test = cifar10_x_test.reshape(10000, 32*32*3) / 255
 cifar10_y_test = cifar10_y_test.reshape(10000)
 
+#get mnist dataset
+(mnist_x_train, mnist_y_train), (mnist_x_test, mnist_y_test) = mnist.load_data()
+mnist_x_train = mnist_x_train / 255
+mnist_x_test = mnist_x_test / 255
+
+# 5より小さいラベルのデータを訓練データとする（テストデータは5より大きい）
 cifar5_x_train = cifar10_x_train[cifar10_y_train<5,:]
 cifar5_y_train = cifar10_y_train[cifar10_y_train<5]
 cifar5_x_test = cifar10_x_train[cifar10_y_train>=5,:]
 cifar5_y_test = cifar10_y_train[cifar10_y_train>=5]
+
+# one-hotベクトルに変換
 cifar5_y_train = np.eye(5)[cifar5_y_train]
 cifar5_y_test = np.eye(5)[cifar5_y_test - 5]
 
-
-#download notmnist dataset
-get_ipython().system('wget http://yaroslavvb.com/upload/notMNIST/notMNIST_small.mat')
-  
+# mnistのような手書き数字以外の文字が入っている
 notmnist = scipy.io.loadmat("notMNIST_small.mat")
 notmnist_x = np.array(notmnist["images"]).reshape(28*28,18724).transpose() / 255
 notmnist_y = np.eye(10)[np.array(notmnist["labels"]).astype(int)]
 
-
-# %%
 # display a couple of pictures from the dataset
-
-digit = mnist.train.images[4].copy()
-digit2 = mnist.train.images[222].copy()
+digit = mnist_x_train[0]
+digit2 = mnist_x_train[1]
 
 i = 0
 plt.figure(figsize=(10,10))
@@ -173,10 +51,7 @@ for image, size in ((digit, (28,28)),
   plt.grid(False)
   plt.imshow(image.copy().reshape(size))
 
-# %% [markdown]
-# ##### Utility functions
 
-# %%
 #### Logit to evidence converters - activation functions (they have to produce non-negative outputs for the uncertaintyuncertainity process)
 
 def relu_evidence(logits):
@@ -220,10 +95,6 @@ def loss_eq3(p, alpha, K, global_step, annealing_step):
     KL_reg =  tf.minimum(1.0, tf.cast(global_step/annealing_step, tf.float32)) * KL((alpha - 1)*(1-p) + 1 , K)
     return loglikelihood + KL_reg
 
-# %% [markdown]
-# ##### Drawing functions
-
-# %%
 #### Graphs of total evidence & uncertainty for test/train datasets (plus their classification accuracies)
 
 def draw_EDL_results(K, train_acc1, train_ev_s, train_ev_f, test_acc1, test_ev_s, test_ev_f): 
@@ -317,15 +188,11 @@ def rotating_image_classification(img, sess, prob, X, keep_prob, K, uncertainty=
     plt.axis('off')
     plt.show()
 
-# %% [markdown]
-# ### Models
-# %% [markdown]
 # ##### LeNet with softmax cross entropy loss function
-
-# %%
+# shapeで指定した大きさの行列の何かを得る（nameはtf.Variableの名前として出てくる）
 def var(name, shape, init=None):
-    init = tf.truncated_normal_initializer(stddev=(2/shape[0])**0.5) if init is None else init
-    return tf.get_variable(name=name, shape=shape, dtype=tf.float32, initializer=init)
+    init = tf.compat.v1.truncated_normal_initializer(stddev=(2/shape[0])**0.5) if init is None else init
+    return tf.compat.v1.get_variable(name=name, shape=shape, dtype=tf.float32, initializer=init)
 
 def LeNet_softmax(K, lmb=0.005, dims=(28,28), nch=1): 
     g = tf.Graph()
@@ -368,7 +235,6 @@ def LeNet_softmax(K, lmb=0.005, dims=(28,28), nch=1):
         
         return g, step, X, Y, keep_prob, prob, acc, loss
 
-# %% [markdown]
 # ##### LeNet with expected mean square error loss
 
 # %%
